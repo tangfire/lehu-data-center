@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package api.id_generator.service.v1;
+
+option go_package = "lehu-data-center/api/id_generator/service/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.id_generator.service.v1";
+
+// id生成服务
+service IdGenerator {
+	// 生成单个id
+	rpc GenerateId(GenerateIdReq) returns (GenerateIdResp);
+
+	// 批量生成id
+	rpc GenerateBatch(GenerateBatchReq) returns(GenerateBatchResp);
+}
+message GenerateIdReq{
+	string type = 1;
+}
+
+message GenerateIdResp{
+	int64 id = 1;        // 生成的ID
+	int64 timestamp = 2; // ID中包含的时间戳（毫秒）
+	int32 worker_id = 3; // 工作节点ID
+	int32 sequence = 4;  // 序列号
+}
+
+// 批量生成ID请求
+message GenerateBatchReq {
+	uint32 count = 1;    // 需要生成的ID数量（建议1-1000）
+	string type = 2; // ID类型
+}
+
+// 批量生成ID响应
+message GenerateBatchResp {
+	repeated int64 ids = 1;           // 生成的ID列表
+	repeated IdDetail details = 2;    // 每个ID的详细信息（可选）
+	int64 generate_time_ms = 3;       // 生成耗时（毫秒）
+}
+
+// ID详细信息
+message IdDetail {
+	int64 id = 1;
+	int64 timestamp = 2;
+	int32 worker_id = 3;
+	int32 sequence = 4;
+}

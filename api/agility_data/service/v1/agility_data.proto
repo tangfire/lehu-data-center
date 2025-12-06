@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package api.agility_data.service.v1;
+
+option go_package = "lehu-data-center/api/agility_data/service/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.agility_data.service.v1";
+
+// 需要添加这行导入
+import "google/protobuf/timestamp.proto";
+
+// 敏捷数据服务
+service AgilityData {
+	// List 查询列表数据
+	rpc List(ListRequest) returns (ListResponse) {}
+
+	// Get 查询单条数据
+	rpc Get(GetRequest) returns (GetResponse) {}
+
+	// Execute 执行SQL
+	rpc Execute(ExecuteRequest) returns (ExecuteResponse) {}
+
+	// BatchExecute 批量执行
+	rpc BatchExecute(BatchExecuteRequest) returns (BatchExecuteResponse) {}
+
+	// TestConnection 测试连接
+	rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse) {}
+}
+
+// ListRequest 列表查询请求
+message ListRequest {
+	string sql = 1;                     // SQL语句
+	string data_source_name = 2;        // 数据源名称
+	map<string, string> params = 3;     // 查询参数
+	int32 page = 4;                     // 页码
+	int32 page_size = 5;                // 每页大小
+	string result_type = 6;             // 结果类型（可选）
+}
+
+// ListResponse 列表查询响应
+message ListResponse {
+	repeated Record records = 1;        // 记录列表
+	int32 total_count = 2;              // 总记录数
+	int32 page = 3;                     // 当前页码
+	int32 page_size = 4;                // 每页大小
+	int32 total_pages = 5;              // 总页数
+	string error_message = 6;           // 错误信息
+	bool success = 7;                   // 是否成功
+}
+
+// GetRequest 单条查询请求
+message GetRequest {
+	string sql = 1;
+	string data_source_name = 2;
+	map<string, string> params = 3;
+}
+
+// GetResponse 单条查询响应
+message GetResponse {
+	Record record = 1;
+	string error_message = 2;
+	bool success = 3;
+}
+
+// ExecuteRequest 执行请求
+message ExecuteRequest {
+	string sql = 1;
+	string data_source_name = 2;
+	map<string, string> params = 3;
+	bool return_generated_keys = 4;     // 是否返回生成的主键
+}
+
+// ExecuteResponse 执行响应
+message ExecuteResponse {
+	int64 rows_affected = 1;            // 影响的行数
+	repeated int64 generated_keys = 2;  // 生成的主键
+	string error_message = 3;
+	bool success = 4;
+}
+
+// 用于BatchExecuteRequest的参数映射
+message ParamsMap {
+	map<string, string> params = 1;
+}
+
+// BatchExecuteRequest 批量执行请求
+message BatchExecuteRequest {
+	string sql = 1;
+	string data_source_name = 2;
+	repeated ParamsMap params_list = 3;  // 使用嵌套消息代替repeated map
+}
+
+// BatchExecuteResponse 批量执行响应
+message BatchExecuteResponse {
+	repeated int64 rows_affected_list = 1;  // 每条SQL影响的行数
+	string error_message = 2;
+	bool success = 3;
+}
+
+// TestConnectionRequest 测试连接请求
+message TestConnectionRequest {
+	string data_source_name = 1;
+}
+
+// TestConnectionResponse 测试连接响应
+message TestConnectionResponse {
+	bool connected = 1;
+	string message = 2;
+	int64 response_time_ms = 3;         // 响应时间(毫秒)
+}
+
+// Record 记录
+message Record {
+	map<string, Value> fields = 1;      // 字段名 -> 值
+}
+
+// Value 值类型
+message Value {
+	oneof value {
+		string string_value = 1;
+		int64 int_value = 2;
+		double double_value = 3;
+		bool bool_value = 4;
+		bytes bytes_value = 5;
+		google.protobuf.Timestamp timestamp_value = 6;
+		NullValue null_value = 7;
+	}
+}
+
+// NullValue 空值
+enum NullValue {
+	NULL_VALUE = 0;
+}
+
+// DataSourceInfo 数据源信息
+message DataSourceInfo {
+	string name = 1;
+	string driver = 2;                   // 驱动类型：mysql, postgresql, oracle等
+	string host = 3;
+	int32 port = 4;
+	string database = 5;
+	string username = 6;
+	bool is_active = 7;
+	int64 created_at = 8;
+	int64 updated_at = 9;
+}

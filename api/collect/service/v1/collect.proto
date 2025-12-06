@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package api.collect.service.v1;
+
+option go_package = "lehu-data-center/api/collect/service/v1;v1";
+option java_multiple_files = true;
+option java_package = "api.collect.service.v1";
+
+service Collect {
+	rpc CreateCollect (CreateCollectRequest) returns (CreateCollectReply);
+	rpc UpdateCollect (UpdateCollectRequest) returns (UpdateCollectReply);
+	rpc DeleteCollect (DeleteCollectRequest) returns (DeleteCollectReply);
+	rpc GetCollect (GetCollectRequest) returns (GetCollectReply);
+	rpc ListCollect (ListCollectRequest) returns (ListCollectReply);
+}
+
+message CreateCollectRequest {}
+message CreateCollectReply {}
+
+message UpdateCollectRequest {}
+message UpdateCollectReply {}
+
+message DeleteCollectRequest {}
+message DeleteCollectReply {}
+
+message GetCollectRequest {}
+message GetCollectReply {}
+
+message ListCollectRequest {}
+message ListCollectReply {}
