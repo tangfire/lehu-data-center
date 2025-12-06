@@ -24,8 +24,19 @@ import (
 
 // wireApp init kratos application.
 func wireApp(confServer *conf.Server, registry *conf.Registry, confData *conf.Data, logger log.Logger) (*kratos.App, func(), error) {
-	dataData, cleanup, err := data.NewData(confData, logger)
+	db, cleanup, err := data.NewDefaultDB(confData, logger)
 	if err != nil {
+		return nil, nil, err
+	}
+	dataSourceMap, cleanup2, err := data.NewDataSourceMap(confData, logger)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	dataData, cleanup3, err := data.NewData(db, dataSourceMap, logger)
+	if err != nil {
+		cleanup2()
+		cleanup()
 		return nil, nil, err
 	}
 	agilityRepo := data.NewAgilityRepo(dataData, logger)
@@ -35,6 +46,8 @@ func wireApp(confServer *conf.Server, registry *conf.Registry, confData *conf.Da
 	registrar := server.NewRegistrar(registry)
 	app := newApp(logger, grpcServer, registrar)
 	return app, func() {
+		cleanup3()
+		cleanup2()
 		cleanup()
 	}, nil
 }

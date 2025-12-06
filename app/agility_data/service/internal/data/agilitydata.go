@@ -3,11 +3,12 @@ package data
 import (
 	"context"
 	"fmt"
-	"gorm.io/gorm"
-	"lehu-data-center/app/agility_data/service/internal/biz"
 	"strings"
 
+	"lehu-data-center/app/agility_data/service/internal/biz"
+
 	"github.com/go-kratos/kratos/v2/log"
+	"gorm.io/gorm"
 )
 
 type agilityRepo struct {
@@ -15,7 +16,7 @@ type agilityRepo struct {
 	log  *log.Helper
 }
 
-// NewAgilityRepo .
+// NewAgilityRepo 创建敏捷数据仓库
 func NewAgilityRepo(data *Data, logger log.Logger) biz.AgilityRepo {
 	return &agilityRepo{
 		data: data,
@@ -24,16 +25,14 @@ func NewAgilityRepo(data *Data, logger log.Logger) biz.AgilityRepo {
 }
 
 func (r *agilityRepo) List(ctx context.Context, sql string, dataSourceName string, params map[string]interface{}, page, pageSize int) ([]map[string]interface{}, int64, error) {
-	// 获取数据库连接
-	db, err := r.getDB(dataSourceName)
+	db, err := r.data.GetDB(dataSourceName)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("get database connection failed: %v", err)
 	}
 
-	// 构建计数SQL
-	countSQL := fmt.Sprintf("SELECT COUNT(*) as total FROM (%s) as t", sql)
+	// 构建计数SQL（移除子查询的别名，使用更兼容的方式）
+	countSQL := "SELECT COUNT(*) FROM (" + sql + ") as count_table"
 
-	// 查询总数
 	var total int64
 	if err := db.Raw(countSQL, params).Scan(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count query failed: %v", err)
@@ -55,10 +54,9 @@ func (r *agilityRepo) List(ctx context.Context, sql string, dataSourceName strin
 }
 
 func (r *agilityRepo) Get(ctx context.Context, sql string, dataSourceName string, params map[string]interface{}) (map[string]interface{}, error) {
-	// 获取数据库连接
-	db, err := r.getDB(dataSourceName)
+	db, err := r.data.GetDB(dataSourceName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get database connection failed: %v", err)
 	}
 
 	var result map[string]interface{}
@@ -73,9 +71,9 @@ func (r *agilityRepo) Get(ctx context.Context, sql string, dataSourceName string
 }
 
 func (r *agilityRepo) Execute(ctx context.Context, sql string, dataSourceName string, params map[string]interface{}) (int64, error) {
-	db, err := r.getDB(dataSourceName)
+	db, err := r.data.GetDB(dataSourceName)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("get database connection failed: %v", err)
 	}
 
 	// 判断SQL类型
@@ -106,9 +104,9 @@ func (r *agilityRepo) BatchExecute(ctx context.Context, sql string, dataSourceNa
 		return []int64{}, nil
 	}
 
-	db, err := r.getDB(dataSourceName)
+	db, err := r.data.GetDB(dataSourceName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get database connection failed: %v", err)
 	}
 
 	var rowsAffectedList []int64
@@ -119,6 +117,7 @@ func (r *agilityRepo) BatchExecute(ctx context.Context, sql string, dataSourceNa
 		return nil, tx.Error
 	}
 
+	// 确保事务回滚
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
@@ -144,9 +143,9 @@ func (r *agilityRepo) BatchExecute(ctx context.Context, sql string, dataSourceNa
 }
 
 func (r *agilityRepo) TestConnection(ctx context.Context, dataSourceName string) error {
-	db, err := r.getDB(dataSourceName)
+	db, err := r.data.GetDB(dataSourceName)
 	if err != nil {
-		return err
+		return fmt.Errorf("get database connection failed: %v", err)
 	}
 
 	// 执行简单查询测试连接
@@ -161,24 +160,4 @@ func (r *agilityRepo) TestConnection(ctx context.Context, dataSourceName string)
 	}
 
 	return nil
-}
-
-// getDB 获取数据库连接
-func (r *agilityRepo) getDB(dataSourceName string) (*gorm.DB, error) {
-	if dataSourceName == "" || dataSourceName == "default" {
-		// 使用默认数据库连接
-		db := r.data.GetDefaultDB()
-		if db == nil {
-			return nil, fmt.Errorf("default database not configured")
-		}
-		return db, nil
-	}
-
-	// 获取指定数据源
-	ds, ok := r.data.GetDataSource(dataSourceName)
-	if !ok {
-		return nil, fmt.Errorf("data source '%s' not found", dataSourceName)
-	}
-
-	return ds.DB, nil
 }

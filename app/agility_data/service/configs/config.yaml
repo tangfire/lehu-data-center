@@ -15,14 +15,7 @@ data:
     max_idle_conns: 10
     max_open_conns: 100
     conn_max_lifetime: 3600s
-  redis:
-    network: tcp
-    addr: 127.0.0.1:6379
-    password: ""
-    db: 0
-    read_timeout: 3s
-    write_timeout: 3s
-    dial_timeout: 10s
+
   data_sources:
     - name: "default_mysql"
       connection:
@@ -32,6 +25,22 @@ data:
         database: "test_db"
         username: "root"
         password: "password"
+        parameters:
+          charset: "utf8mb4"
+          parseTime: "True"
+          loc: "Local"
+      is_active: true
+      created_at: 1640995200
+      updated_at: 1640995200
+
+    - name: "analytics_db"
+      connection:
+        driver: "mysql"
+        host: "192.168.1.100"
+        port: 3306
+        database: "analytics"
+        username: "analytics_user"
+        password: "analytics_pass"
         parameters:
           charset: "utf8mb4"
           parseTime: "True"

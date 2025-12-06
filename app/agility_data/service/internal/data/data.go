@@ -2,117 +2,131 @@ package data
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"lehu-data-center/app/agility_data/service/internal/conf"
-	"sync"
-	"time"
 )
 
 // ProviderSet is data providers.
-var ProviderSet = wire.NewSet(NewData, NewAgilityRepo)
+var ProviderSet = wire.NewSet(
+	NewData,
+	NewAgilityRepo,
+	NewDefaultDB,
+	NewDataSourceMap,
+)
 
-// Data .
+// Data 数据访问层
 type Data struct {
-	// TODO wrapped database client
-	db          *gorm.DB
-	dataSources map[string]*DataSource
-	mu          sync.RWMutex
+	defaultDB  *gorm.DB       // 默认数据库连接
+	dataSource *DataSourceMap // 数据源映射
+	log        *log.Helper
 }
 
-// DataSource 表示一个数据源连接
-type DataSource struct {
-	Name   string
-	DB     *gorm.DB
-	Config *conf.Data_DataSource_Connection
+// DataSourceMap 数据源映射，线程安全
+type DataSourceMap struct {
+	sources map[string]*gorm.DB
+	log     *log.Helper
 }
 
-// NewData .
-func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
+// NewDataSourceMap 创建数据源映射
+func NewDataSourceMap(c *conf.Data, logger log.Logger) (*DataSourceMap, func(), error) {
 	log := log.NewHelper(logger)
-	// 初始化主数据连接
-	var db *gorm.DB
-	var err error
+	sources := make(map[string]*gorm.DB)
 
-	if c.Database != nil {
-		db, err = initDatabase(c.Database)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to connect database: %v", err)
-		}
-	}
-
-	// 初始化数据源连接池
-	dataSources := make(map[string]*DataSource)
+	var cleanupFuncs []func()
 
 	// 初始化配置中的数据源
 	for _, dsConf := range c.DataSources {
-		if dsConf.IsActive {
-			dsDB, err := initDataSourceDB(dsConf.Connection, logger)
-			if err != nil {
-				log.Errorf("Failed to init data source %s: %v", dsConf.Name, err)
-				continue
-			}
-			dataSources[dsConf.Name] = &DataSource{
-				Name:   dsConf.Name,
-				DB:     dsDB,
-				Config: dsConf.Connection,
-			}
-			log.Infof("Data source '%s' initialized", dsConf.Name)
+		if !dsConf.IsActive {
+			continue
 		}
+
+		db, cleanup, err := initDataSource(dsConf.Connection, logger)
+		if err != nil {
+			log.Errorf("Failed to init data source %s: %v", dsConf.Name, err)
+			continue
+		}
+
+		sources[dsConf.Name] = db
+		cleanupFuncs = append(cleanupFuncs, cleanup)
+		log.Infof("Data source '%s' initialized", dsConf.Name)
 	}
 
-	log.Infof("Total data sources initialized: %d", len(dataSources))
+	log.Infof("Total data sources initialized: %d", len(sources))
 
 	cleanup := func() {
-		log.Info("closing the data resources")
-
-		// 关闭主数据库连接
-		if db != nil {
-			sqlDB, err := db.DB()
-			if err == nil {
-				sqlDB.Close()
-				log.Info("main database connection closed")
-			}
+		for _, f := range cleanupFuncs {
+			f()
 		}
-
-		// 关闭所有数据源连接
-		for name, ds := range dataSources {
-			if ds.DB != nil {
-				sqlDB, err := ds.DB.DB()
-				if err == nil {
-					sqlDB.Close()
-					log.Infof("data source '%s' connection closed", name)
-				}
-			}
-		}
+		log.Info("All data sources closed")
 	}
 
-	return &Data{
-		db:          db,
-		dataSources: dataSources,
+	return &DataSourceMap{
+		sources: sources,
+		log:     log,
 	}, cleanup, nil
 }
 
-func initDatabase(dbConf *conf.Data_Database) (*gorm.DB, error) {
-	var dialector gorm.Dialector
+// NewDefaultDB 创建默认数据库连接
+func NewDefaultDB(c *conf.Data, logger log.Logger) (*gorm.DB, func(), error) {
+	log := log.NewHelper(logger)
 
+	if c.Database == nil {
+		return nil, nil, fmt.Errorf("database config is required")
+	}
+
+	db, cleanup, err := initDatabase(c.Database, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect default database: %v", err)
+	}
+
+	log.Info("Default database connected")
+	return db, cleanup, nil
+}
+
+// NewData 创建数据访问层
+func NewData(
+	defaultDB *gorm.DB,
+	dataSource *DataSourceMap,
+	logger log.Logger,
+) (*Data, func(), error) {
+	log := log.NewHelper(logger)
+
+	cleanup := func() {
+		log.Info("closing data resources")
+	}
+
+	return &Data{
+		defaultDB:  defaultDB,
+		dataSource: dataSource,
+		log:        log,
+	}, cleanup, nil
+}
+
+// initDatabase 初始化数据库连接
+func initDatabase(dbConf *conf.Data_Database, logger log.Logger) (*gorm.DB, func(), error) {
+	log := log.NewHelper(logger)
+
+	var dialector gorm.Dialector
 	switch dbConf.Driver {
 	case "mysql":
 		dialector = mysql.Open(dbConf.Source)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", dbConf.Driver)
+		return nil, nil, fmt.Errorf("unsupported database driver: %s", dbConf.Driver)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 配置连接池
@@ -126,31 +140,52 @@ func initDatabase(dbConf *conf.Data_Database) (*gorm.DB, error) {
 		sqlDB.SetConnMaxLifetime(dbConf.ConnMaxLifetime.AsDuration())
 	}
 
-	return db, nil
+	cleanup := func() {
+		if err := sqlDB.Close(); err != nil {
+			log.Errorf("Failed to close database connection: %v", err)
+		}
+	}
+
+	return db, cleanup, nil
 }
 
-// 为数据源初始化数据库连接
-func initDataSourceDB(conn *conf.Data_DataSource_Connection, l log.Logger) (*gorm.DB, error) {
-	var dialector gorm.Dialector
-	var dsn string
+// initDataSource 初始化数据源连接
+func initDataSource(conn *conf.Data_DataSource_Connection, logger log.Logger) (*gorm.DB, func(), error) {
+	log := log.NewHelper(logger)
 
+	var dialector gorm.Dialector
 	switch conn.Driver {
 	case "mysql":
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-			conn.Username, conn.Password, conn.Host, conn.Port, conn.Database)
-		dialector = mysql.Open(dsn)
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+			conn.Username,
+			conn.Password,
+			conn.Host,
+			conn.Port,
+			conn.Database,
+		)
+
+		// 添加参数
+		params := "?charset=utf8mb4&parseTime=True&loc=Local"
+		for k, v := range conn.Parameters {
+			if len(params) > 1 {
+				params += "&"
+			}
+			params += k + "=" + v
+		}
+
+		dialector = mysql.Open(dsn + params)
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", conn.Driver)
+		return nil, nil, fmt.Errorf("unsupported database driver: %s", conn.Driver)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to data source: %v", err)
+		return nil, nil, fmt.Errorf("failed to connect to data source: %v", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 设置连接池参数
@@ -158,92 +193,54 @@ func initDataSourceDB(conn *conf.Data_DataSource_Connection, l log.Logger) (*gor
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
+	log.Infof("Data source connected: %s@%s:%d/%s",
+		conn.Username, conn.Host, conn.Port, conn.Database)
+
+	cleanup := func() {
+		if err := sqlDB.Close(); err != nil {
+			log.Errorf("Failed to close data source connection: %v", err)
+		}
+	}
+
+	return db, cleanup, nil
+}
+
+// GetDB 获取数据库连接
+func (d *Data) GetDB(dataSourceName string) (*gorm.DB, error) {
+	if dataSourceName == "" || dataSourceName == "default" {
+		if d.defaultDB == nil {
+			return nil, fmt.Errorf("default database not configured")
+		}
+		return d.defaultDB, nil
+	}
+
+	return d.dataSource.Get(dataSourceName)
+}
+
+// Get 从数据源映射中获取数据库连接
+func (m *DataSourceMap) Get(name string) (*gorm.DB, error) {
+	if m == nil {
+		return nil, fmt.Errorf("data source map is nil")
+	}
+
+	db, exists := m.sources[name]
+	if !exists {
+		return nil, fmt.Errorf("data source '%s' not found", name)
+	}
+
 	return db, nil
 }
 
-//func initDatabase(dbConf *conf.Data_Database) (*gorm.DB, error) {
-//	var dialector gorm.Dialector
-//
-//	switch dbConf.Driver {
-//	case "mysql":
-//		dialector = mysql.Open(dbConf.Source)
-//	default:
-//		return nil, fmt.Errorf("unsupported database driver: %s", dbConf.Driver)
-//	}
-//
-//	db, err := gorm.Open(dialector, &gorm.Config{})
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	sqlDB, err := db.DB()
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	// 配置连接池
-//	if dbConf.MaxIdleConns > 0 {
-//		sqlDB.SetMaxIdleConns(int(dbConf.MaxIdleConns))
-//	}
-//	if dbConf.MaxOpenConns > 0 {
-//		sqlDB.SetMaxOpenConns(int(dbConf.MaxOpenConns))
-//	}
-//	if dbConf.ConnMaxLifetime != nil {
-//		sqlDB.SetConnMaxLifetime(dbConf.ConnMaxLifetime.AsDuration())
-//	}
-//
-//	return db, nil
-//}
-//
-//// initDataSourceDB 为数据源初始化数据库连接
-//func initDataSourceDB(conn *conf.Data_DataSource_Connection, logger log.Logger) (*gorm.DB, error) {
-//	var dialector gorm.Dialector
-//	var dsn string
-//
-//	switch conn.Driver {
-//	case "mysql":
-//		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-//			conn.Username, conn.Password, conn.Host, conn.Port, conn.Database)
-//		dialector = mysql.Open(dsn)
-//	default:
-//		return nil, fmt.Errorf("unsupported database driver: %s", conn.Driver)
-//	}
-//
-//	db, err := gorm.Open(dialector, &gorm.Config{})
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to connect to data source: %v", err)
-//	}
-//
-//	sqlDB, err := db.DB()
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	// 设置连接池参数
-//	sqlDB.SetMaxIdleConns(10)
-//	sqlDB.SetMaxOpenConns(100)
-//	sqlDB.SetConnMaxLifetime(time.Hour)
-//
-//	log.NewHelper(logger).Infof("Data source connected: %s@%s:%d/%s",
-//		conn.Username, conn.Host, conn.Port, conn.Database)
-//
-//	return db, nil
-//}
-
-// GetDataSource 获取数据源
-func (d *Data) GetDataSource(name string) (*DataSource, bool) {
-	if name == "" {
-		return nil, false
+// GetAllNames 获取所有数据源名称
+func (m *DataSourceMap) GetAllNames() []string {
+	if m == nil {
+		return []string{}
 	}
 
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	names := make([]string, 0, len(m.sources))
+	for name := range m.sources {
+		names = append(names, name)
+	}
 
-	ds, ok := d.dataSources[name]
-	return ds, ok
-}
-
-// GetDefaultDB 获取默认数据库连接
-func (d *Data) GetDefaultDB() *gorm.DB {
-	return d.db
+	return names
 }
