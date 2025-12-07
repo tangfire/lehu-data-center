@@ -2,32 +2,108 @@ package biz
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kratos/kratos/v2/log"
-	"time"
+	"lehu-data-center/app/collect/service/internal/entity"
+	"lehu-data-center/app/collect/service/internal/enums"
+	"lehu-data-center/app/collect/service/internal/types/transfers"
 )
 
-type DimensionGatherModel struct {
-	Id                int64     `json:"id" gorm:"column:id"`                                   // id
-	RuleId            int64     `json:"rule_id" gorm:"column:rule_id"`                         // 规则id
-	CollectType       int8      `json:"collect_type" gorm:"column:collect_type"`               // 收集的方式 1：sql查询 2：调用接口
-	CollectDetail     string    `json:"collect_detail" gorm:"column:collect_detail"`           //  具体的收集实现，如果是sql，就是sql脚本。如果是接口，就是url
-	CollectSourceName string    `json:"collect_source_name" gorm:"column:collect_source_name"` // 收集的源头名字，如果是数据库，就是数据源名字
-	Entity            string    `json:"entity" gorm:"column:entity"`                           // 表名
-	Status            int       `json:"status" gorm:"column:status"`                           // 状态 1:启用 0:禁用
-	UpdateTime        time.Time `json:"update_time" gorm:"column:update_time"`                 // 编辑时间
-	CreateTime        time.Time `json:"create_time" gorm:"column:create_time"`                 // 创建时间
-}
-
 type DimensionGatherRepo interface {
-	GetDimensionGatherByRuleIdAndEntity(context.Context, int64, string) (*DimensionGatherModel, error)
+	GetDimensionGatherByRuleIdAndEntity(context.Context, int64, enums.Entity) (*entity.DimensionGather, error)
 }
 
 type DimensionGatherUsecase struct {
-	repo     DimensionGatherRepo
-	ruleRepo RuleRepo
-	log      *log.Helper
+	repo       DimensionGatherRepo
+	ruleRepo   RuleRepo
+	handlerCtx *CollectTypeHandlerContext
+	log        *log.Helper
 }
 
-func NewDimensionGatherUsecase(repo DimensionGatherRepo, logger log.Logger) *DimensionGatherUsecase {
-	return &DimensionGatherUsecase{repo: repo, log: log.NewHelper(logger)}
+func NewDimensionGatherUsecase(
+	repo DimensionGatherRepo,
+	ruleRepo RuleRepo,
+	handlerCtx *CollectTypeHandlerContext,
+	logger log.Logger,
+) *DimensionGatherUsecase {
+	return &DimensionGatherUsecase{
+		repo:       repo,
+		ruleRepo:   ruleRepo,
+		handlerCtx: handlerCtx,
+		log:        log.NewHelper(logger),
+	}
+}
+
+func (uc *DimensionGatherUsecase) HandleDimensionData(
+	ctx context.Context,
+	ruleId int64,
+	requestTime *transfers.RequestTime,
+) ([]*transfers.DimensionTransfer, error) {
+	// 1. 查询规则
+	rule, err := uc.ruleRepo.GetRuleById(ctx, ruleId)
+	if err != nil {
+		uc.log.WithContext(ctx).Errorf("HandleDimensionData|GetRuleById fail, ruleId:%v, err:%v", ruleId, err)
+		return nil, fmt.Errorf("get rule failed: %w", err)
+	}
+
+	if rule == nil {
+		uc.log.WithContext(ctx).Warnf("HandleDimensionData|rule not found, ruleId:%v", ruleId)
+		return []*transfers.DimensionTransfer{}, nil
+	}
+
+	// 2. 获取维度收集配置
+	dimensionGather, err := uc.repo.GetDimensionGatherByRuleIdAndEntity(
+		ctx,
+		ruleId,
+		enums.EntityVideoReact,
+	)
+	if err != nil {
+		uc.log.WithContext(ctx).Errorf(
+			"HandleDimensionData|GetDimensionGatherByRuleIdAndEntity fail, ruleId:%v, err:%v",
+			ruleId,
+			err,
+		)
+		return nil, fmt.Errorf("get dimension gather failed: %w", err)
+	}
+
+	if dimensionGather == nil {
+		uc.log.WithContext(ctx).Warnf(
+			"HandleDimensionData|dimension gather not found, ruleId:%v",
+			ruleId,
+		)
+		return []*transfers.DimensionTransfer{}, nil
+	}
+
+	// 3. 获取对应的采集处理器
+	collectType := enums.CollectType(dimensionGather.CollectType)
+	handler, err := uc.handlerCtx.GetHandler(collectType)
+	if err != nil {
+		uc.log.WithContext(ctx).Errorf(
+			"HandleDimensionData|GetHandler fail, collectType:%v, err:%v",
+			collectType,
+			err,
+		)
+		return nil, fmt.Errorf("get collect type handler failed: %w", err)
+	}
+
+	// 4. 执行采集
+	result, err := handler.DoCollect(ctx, dimensionGather, requestTime)
+	if err != nil {
+		uc.log.WithContext(ctx).Errorf(
+			"HandleDimensionData|DoCollect fail, ruleId:%v, collectType:%v, err:%v",
+			ruleId,
+			collectType,
+			err,
+		)
+		return nil, fmt.Errorf("do collect failed: %w", err)
+	}
+
+	uc.log.WithContext(ctx).Infof(
+		"HandleDimensionData success, ruleId:%v, collectType:%v, resultCount:%d",
+		ruleId,
+		collectType,
+		len(result),
+	)
+
+	return result, nil
 }

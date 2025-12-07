@@ -3,29 +3,67 @@ package biz
 import (
 	"context"
 	"github.com/go-kratos/kratos/v2/log"
-	"time"
+	"lehu-data-center/app/collect/service/internal/entity"
+	"lehu-data-center/app/collect/service/internal/types/transfers"
 )
 
-type RuleModel struct {
-	Id            int64     `json:"id" gorm:"column:id"`                           // id
-	RuleDescribe  string    `json:"rule_describe" gorm:"column:rule_describe"`     // 规则描述
-	RuleName      string    `json:"rule_name" gorm:"column:rule_name"`             // 规则名字
-	RuleType      int8      `json:"rule_type" gorm:"column:rule_type"`             // 规则类型 1收集 2 查询
-	RuleVersionId int64     `json:"rule_version_id" gorm:"column:rule_version_id"` // 如果需要规则变更，直接创建一个新规则，将版本号递增
-	Status        int       `json:"status" gorm:"column:status"`                   // 状态 1:启用 0:禁用
-	UpdateTime    time.Time `json:"update_time" gorm:"column:update_time"`         // 编辑时间
-	CreateTime    time.Time `json:"create_time" gorm:"column:create_time"`         // 创建时间
-}
-
 type RuleRepo interface {
-	GetRuleById(context.Context, int64) (*RuleModel, error)
+	GetRuleById(context.Context, int64) (*entity.Rule, error)
 }
 
 type RuleUsecase struct {
-	repo RuleRepo
-	log  *log.Helper
+	repo           RuleRepo
+	metricRepo     MetricRepo
+	dataHandlerCtx *DataHandlerContext
+	log            *log.Helper
 }
 
-func NewRuleUsecase(repo RuleRepo, logger log.Logger) *RuleUsecase {
-	return &RuleUsecase{repo: repo, log: log.NewHelper(logger)}
+func NewRuleUsecase(repo RuleRepo, metricRepo MetricRepo, dataHandlerCtx *DataHandlerContext, logger log.Logger) *RuleUsecase {
+	return &RuleUsecase{repo: repo,
+		metricRepo:     metricRepo,
+		dataHandlerCtx: dataHandlerCtx,
+		log:            log.NewHelper(logger)}
+}
+
+func (h *RuleUsecase) Handle(ctx context.Context, paramTransfers *transfers.ParamTransfers) (*transfers.RuleHandleOutput, error) {
+	// 1. 根据规则ID查询指标信息
+	metricList, err := h.metricRepo.GetMetricListByRuleId(ctx, paramTransfers.RuleId)
+	if err != nil {
+		h.log.WithContext(ctx).Errorf("Handle|GetMetricListByRuleId fail,ruleId:%d,err:%v",
+			paramTransfers.RuleId, err)
+		return transfers.NewErrorRuleHandleOutput("查询指标列表失败"), err
+	}
+
+	if len(metricList) == 0 {
+		h.log.WithContext(ctx).Warnf("Handle|No metrics found for ruleId:%d", paramTransfers.RuleId)
+		return transfers.NewSuccessRuleHandleOutput("未找到指标数据", nil), nil
+	}
+
+	// 2. 构建总参数
+	totalParam := transfers.NewTotalParamTransfers(
+		metricList,
+		paramTransfers,
+		nil, // 采集任务中为空
+	)
+
+	// 3. 根据规则类型获取数据处理器
+	dataHandler, err := h.dataHandlerCtx.GetHandler(int8(paramTransfers.RuleType))
+	if err != nil {
+		h.log.WithContext(ctx).Errorf("Handle|GetDataHandler fail,ruleType:%d,err:%v",
+			paramTransfers.RuleType, err)
+		return transfers.NewErrorRuleHandleOutput("获取数据处理器失败"), err
+	}
+
+	// 4. 执行数据处理
+	output, err := dataHandler.DataHandle(ctx, totalParam)
+	if err != nil {
+		h.log.WithContext(ctx).Errorf("Handle|DataHandle fail,ruleId:%d,err:%v",
+			paramTransfers.RuleId, err)
+		return transfers.NewErrorRuleHandleOutput("数据处理失败"), err
+	}
+
+	h.log.WithContext(ctx).Infof("Handle completed successfully, ruleId:%d, metrics:%d",
+		paramTransfers.RuleId, len(metricList))
+
+	return output, nil
 }

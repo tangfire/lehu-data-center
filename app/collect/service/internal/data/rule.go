@@ -5,6 +5,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"lehu-data-center/app/collect/service/internal/biz"
 	"lehu-data-center/app/collect/service/internal/data/model"
+	"lehu-data-center/app/collect/service/internal/entity"
 )
 
 type ruleRepo struct {
@@ -19,7 +20,7 @@ func NewRuleRepo(data *Data, logger log.Logger) biz.RuleRepo {
 	}
 }
 
-func (r *ruleRepo) GetRuleById(ctx context.Context, id int64) (*biz.RuleModel, error) {
+func (r *ruleRepo) GetRuleById(ctx context.Context, id int64) (*entity.Rule, error) {
 	data := model.Rule{}
 	err := r.data.db.Table(model.Rule{}.TableName()).Where("id = ?", id).First(&data).Error
 	if err != nil {

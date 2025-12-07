@@ -21,7 +21,7 @@ func NewVideoBusinessMessageConsumerRecordRepo(data *Data, logger log.Logger) bi
 func (r *videoBusinessMessageConsumerRecordRepo) DeleteByCreateTime(createTime string) (int64, error) {
 	result := r.data.db.Table(model.VideoBusinessMessageConsumerRecord{}.TableName()).
 		Where("DATE_FORMAT(create_time,'%Y-%m-%d') = ?", createTime).
-		Delete(&VideoBusinessMessageConsumerRecord{})
+		Delete(&model.VideoBusinessMessageConsumerRecord{})
 
 	if result.Error != nil {
 		return 0, result.Error

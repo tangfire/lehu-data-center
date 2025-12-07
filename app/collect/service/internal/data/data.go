@@ -7,6 +7,7 @@ import (
 	"github.com/go-kratos/kratos/v2/registry"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	consulAPI "github.com/hashicorp/consul/api"
+	agilitydatav1 "lehu-data-center/api/agility_data/service/v1"
 	idGeneratorv1 "lehu-data-center/api/id_generator/service/v1"
 	"lehu-data-center/app/collect/service/internal/conf"
 
@@ -26,7 +27,12 @@ var ProviderSet = wire.NewSet(NewData,
 	NewMessageProducerRecordRepo,
 	NewMessageConsumerRecordRepo,
 	NewJobRepo,
-	NewCollectRepo)
+	NewCollectRepo,
+	NewAgilityDataRepo,
+	NewDimensionGatherRepo,
+	NewRuleRepo,
+	NewAgilityDataClient,
+	NewMetricRepo)
 
 // Data .
 type Data struct {
@@ -34,15 +40,16 @@ type Data struct {
 	db                *gorm.DB
 	log               *log.Helper
 	idGeneratorClient idGeneratorv1.IdGeneratorClient
+	agilityDataClient agilitydatav1.AgilityDataClient
 }
 
 // NewData .
-func NewData(c *conf.Data, db *gorm.DB, idGeneratorClient idGeneratorv1.IdGeneratorClient, logger log.Logger) (*Data, func(), error) {
+func NewData(c *conf.Data, db *gorm.DB, idGeneratorClient idGeneratorv1.IdGeneratorClient, agilityDataClient agilitydatav1.AgilityDataClient, logger log.Logger) (*Data, func(), error) {
 	log := log.NewHelper(logger)
 	cleanup := func() {
 		log.Info("closing the data resources")
 	}
-	return &Data{db: db, log: log, idGeneratorClient: idGeneratorClient}, cleanup, nil
+	return &Data{db: db, log: log, idGeneratorClient: idGeneratorClient, agilityDataClient: agilityDataClient}, cleanup, nil
 }
 
 func NewDB(conf *conf.Data, logger log.Logger) *gorm.DB {
@@ -79,5 +86,21 @@ func NewIdGeneratorClient(r registry.Discovery) idGeneratorv1.IdGeneratorClient 
 		panic(err)
 	}
 	c := idGeneratorv1.NewIdGeneratorClient(conn)
+	return c
+}
+
+func NewAgilityDataClient(r registry.Discovery) agilitydatav1.AgilityDataClient {
+	conn, err := grpc.DialInsecure(
+		context.Background(),
+		grpc.WithEndpoint("discovery:///lehu-data-center-agility_data"),
+		grpc.WithDiscovery(r),
+		grpc.WithMiddleware(
+			recovery.Recovery(),
+		),
+	)
+	if err != nil {
+		panic(err)
+	}
+	c := agilitydatav1.NewAgilityDataClient(conn)
 	return c
 }

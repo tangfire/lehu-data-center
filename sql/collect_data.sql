@@ -92,3 +92,38 @@ CREATE TABLE `dimension_gather` (
 INSERT INTO `dimension_gather` VALUES (1,1,1,'SELECT video_id, video_type_id,parent_video_type_id FROM d_video_react where status = 1 and enter_watch_time > :start_time and enter_watch_time < :end_time group by video_id, video_type_id,parent_video_type_id','d_record','d_video_react',1,'2025-07-31 10:01:00','2025-07-31 10:01:00'),(2,1,1,'select id,video_name,video_type_id,video_duration from d_video where status = 1 and video_type_id = :video_type_id','d_record','d_video',1,'2025-07-31 10:01:00','2025-07-31 10:01:00'),(3,1,1,'select id,parent_id,name,category_level from d_video_type where status = 1 and id in ( :video_type_id )','d_record','d_video_type',1,'2025-07-31 10:01:00','2025-07-31 10:01:00');
 
 
+CREATE TABLE `metric` (
+                            `id` bigint auto_increment NOT NULL COMMENT 'id',
+                            `rule_id` bigint NOT NULL COMMENT '规则id',
+                            `metric_name` varchar(256) NOT NULL COMMENT '指标名字',
+                            `metric_describe` varchar(512) DEFAULT NULL COMMENT '指标描述',
+                            `metric_collect_type` int DEFAULT '1' COMMENT '指标收集的类型 1:基础型 2:计算型',
+                            `collect_source_name` varchar(128) DEFAULT NULL COMMENT '基础型指标会用到：收集的源头名字，如果是数据库，就是数据源名字',
+                            `collect_type` tinyint DEFAULT NULL COMMENT '基础型指标会用到：收集的方式 1：sql查询 2：调用接口   对应的枚举：CollectType',
+                            `collect_detail` text COMMENT ' 基础型指标会用到：具体的收集实现，如果是sql，就是sql脚本。如果是接口，就是url',
+                            `metric_time_format` varchar(64) DEFAULT NULL COMMENT '基础性指标会用到：统计的时间格式',
+                            `arguments` varchar(255) DEFAULT '' COMMENT '计算型指标会用到：指标统计的参数',
+                            `function_type` int DEFAULT NULL COMMENT '计算型指标会用到：指标统计函数，详情见FunctionType',
+                            `expression` varchar(255) DEFAULT NULL COMMENT '计算型指标会用到：指标计算表达式',
+                            `show_status` int DEFAULT '1' COMMENT '指标是否显示 1:显示 0:隐藏',
+                            `code_type` int NOT NULL COMMENT '指标数据对应的代码类型，详情见：CodeType',
+                            `metric_type` int NOT NULL COMMENT '类型：1抽取型 2计算型',
+                            `sort` int NOT NULL DEFAULT '1' COMMENT '排序',
+                            `status` int DEFAULT '1' COMMENT '状态 1:启用 0:禁用',
+                            `update_time` datetime DEFAULT NULL COMMENT '编辑时间',
+                            `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+                            PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4  COMMENT='指标表';
+
+
+
+CREATE TABLE `data_save` (
+                               `id` bigint auto_increment NOT NULL,
+                               `rule_id` bigint NOT NULL COMMENT '规则id',
+                               `data_source_name` varchar(256) NOT NULL COMMENT '数据源名称',
+                               `create_table_prefix` varchar(64) CHARACTER SET utf8mb4  NOT NULL DEFAULT 'd_report_' COMMENT '创建表的前缀',
+                               `status` int DEFAULT '1' COMMENT '状态 1:启用 0:禁用',
+                               `update_time` datetime DEFAULT NULL COMMENT '编辑时间',
+                               `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+                               PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4  COMMENT='统计数据保存配置表';

@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -61,7 +62,7 @@ func (r *agilityRepo) Get(ctx context.Context, sql string, dataSourceName string
 
 	var result map[string]interface{}
 	if err := db.Raw(sql, params).Take(&result).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("query failed: %v", err)

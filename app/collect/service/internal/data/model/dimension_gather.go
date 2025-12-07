@@ -1,7 +1,7 @@
 package model
 
 import (
-	"lehu-data-center/app/collect/service/internal/biz"
+	"lehu-data-center/app/collect/service/internal/entity"
 	"time"
 )
 
@@ -21,11 +21,11 @@ func (m DimensionGather) TableName() string {
 	return "dimension_gather"
 }
 
-func (r *DimensionGather) Data2Biz() *biz.DimensionGatherModel {
+func (r *DimensionGather) Data2Biz() *entity.DimensionGather {
 	if r == nil {
 		return nil
 	}
-	return &biz.DimensionGatherModel{
+	return &entity.DimensionGather{
 		Id:                r.Id,
 		RuleId:            r.RuleId,
 		CollectType:       r.CollectType,
@@ -38,7 +38,7 @@ func (r *DimensionGather) Data2Biz() *biz.DimensionGatherModel {
 	}
 }
 
-func (r *DimensionGather) Biz2Data(m *biz.DimensionGatherModel) {
+func (r *DimensionGather) Biz2Data(m *entity.DimensionGather) {
 	if r == nil {
 		return
 	}

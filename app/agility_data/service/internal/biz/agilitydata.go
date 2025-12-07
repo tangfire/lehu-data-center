@@ -95,7 +95,7 @@ func (uc *AgilityUsecase) TestConnection(ctx context.Context, dataSourceName str
 }
 
 // isSafeSQL 简单的SQL安全检查
-//func isSafeSQL(sql string) bool {
+//funcs isSafeSQL(sql string) bool {
 //	// 这里可以实现更复杂的安全检查
 //	// 例如：禁止DROP、TRUNCATE等高危操作（根据业务需求调整）
 //	dangerousKeywords := []string{"DROP", "TRUNCATE", "SHUTDOWN"}

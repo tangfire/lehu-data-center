@@ -7,7 +7,9 @@ require (
 	github.com/go-kratos/kratos/v2 v2.9.2
 	github.com/google/wire v0.6.0
 	github.com/hashicorp/consul/api v1.33.0
+	github.com/shopspring/decimal v1.4.0
 	github.com/sony/sonyflake v1.3.0
+	github.com/yuin/gopher-lua v1.1.1
 	go.uber.org/automaxprocs v1.5.1
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.1

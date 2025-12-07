@@ -1,5 +1,7 @@
+// internal/pkg/enums/date_type.go
 package enums
 
+// DateType 日期类型
 type DateType int
 
 const (
@@ -9,17 +11,60 @@ const (
 	DateTypeYear  DateType = 4 // 年
 )
 
-func (dt DateType) String() string {
-	switch dt {
+// Code 返回枚举的代码值
+func (d DateType) Code() int {
+	return int(d)
+}
+
+// Value 返回枚举的字符串值
+func (d DateType) Value() string {
+	switch d {
 	case DateTypeDay:
-		return "DAY"
+		return "day"
 	case DateTypeWeek:
-		return "WEEK"
+		return "week"
 	case DateTypeMonth:
-		return "MONTH"
+		return "month"
 	case DateTypeYear:
-		return "YEAR"
+		return "year"
 	default:
-		return "UNKNOWN"
+		return ""
+	}
+}
+
+// Msg 返回枚举的描述信息
+func (d DateType) Msg() string {
+	switch d {
+	case DateTypeDay:
+		return "天"
+	case DateTypeWeek:
+		return "周"
+	case DateTypeMonth:
+		return "月"
+	case DateTypeYear:
+		return "年"
+	default:
+		return ""
+	}
+}
+
+// GetDateTypeMsg 根据code获取描述信息
+func GetDateTypeMsg(code int) string {
+	return GetDateTypeByCode(code).Msg()
+}
+
+// GetDateTypeByCode 根据code获取枚举
+func GetDateTypeByCode(code int) DateType {
+	switch code {
+	case 1:
+		return DateTypeDay
+	case 2:
+		return DateTypeWeek
+	case 3:
+		return DateTypeMonth
+	case 4:
+		return DateTypeYear
+	default:
+		return 0
 	}
 }

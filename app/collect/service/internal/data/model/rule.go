@@ -1,7 +1,7 @@
 package model
 
 import (
-	"lehu-data-center/app/collect/service/internal/biz"
+	"lehu-data-center/app/collect/service/internal/entity"
 	"time"
 )
 
@@ -20,11 +20,11 @@ func (r Rule) TableName() string {
 	return "rule"
 }
 
-func (r *Rule) Data2Biz() *biz.RuleModel {
+func (r *Rule) Data2Biz() *entity.Rule {
 	if r == nil {
 		return nil
 	}
-	return &biz.RuleModel{
+	return &entity.Rule{
 		Id:            r.Id,
 		RuleDescribe:  r.RuleDescribe,
 		RuleName:      r.RuleName,
@@ -36,7 +36,7 @@ func (r *Rule) Data2Biz() *biz.RuleModel {
 	}
 }
 
-func (r *Rule) Biz2Data(m *biz.RuleModel) {
+func (r *Rule) Biz2Data(m *entity.Rule) {
 	if m == nil {
 		return
 	}

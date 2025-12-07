@@ -27,7 +27,8 @@ func wireApp(confServer *conf.Server, registry *conf.Registry, confData *conf.Da
 	db := data.NewDB(confData, logger)
 	discovery := data.NewDiscovery(registry)
 	idGeneratorClient := data.NewIdGeneratorClient(discovery)
-	dataData, cleanup, err := data.NewData(confData, db, idGeneratorClient, logger)
+	agilityDataClient := data.NewAgilityDataClient(discovery)
+	dataData, cleanup, err := data.NewData(confData, db, idGeneratorClient, agilityDataClient, logger)
 	if err != nil {
 		return nil, nil, err
 	}

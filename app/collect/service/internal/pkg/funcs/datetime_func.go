@@ -1,12 +1,12 @@
 // internal/pkg/datetime/datetime_func.go
-package datetime
+package funcs
 
 import (
 	"errors"
 	"fmt"
-	"lehu-data-center/app/collect/service/internal/biz"
 	"lehu-data-center/app/collect/service/internal/enums"
 	"lehu-data-center/app/collect/service/internal/pkg/timeutil"
+	"lehu-data-center/app/collect/service/internal/types/transfers"
 	"time"
 )
 
@@ -22,8 +22,8 @@ var (
 )
 
 // CreateRequestTime 根据日期类型和日期创建请求时间范围
-func CreateRequestTime(dateType enums.DateType, date time.Time) (*biz.RequestTime, error) {
-	requestTime := &biz.RequestTime{
+func CreateRequestTime(dateType enums.DateType, date time.Time) (*transfers.RequestTime, error) {
+	requestTime := &transfers.RequestTime{
 		GatherDate: date,
 		DateType:   dateType,
 	}

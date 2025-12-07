@@ -1,6 +1,8 @@
 package biz
 
-import "github.com/google/wire"
+import (
+	"github.com/google/wire"
+)
 
 // ProviderSet is biz providers.
 var ProviderSet = wire.NewSet(NewDataJobUsecase,
@@ -8,4 +10,10 @@ var ProviderSet = wire.NewSet(NewDataJobUsecase,
 	NewMessageProducerRecordUsecase,
 	NewVideoBusinessMessageConsumerRecordUsecase,
 	NewVideoBusinessMessageProducerRecordUsecase,
-	NewCollectUsecase)
+	NewCollectUsecase,
+	NewRuleUsecase,
+	NewDimensionGatherUsecase,
+	NewSqlCollectHandler,
+	NewCollectTypeHandlerContext,
+	NewMetricUsecase,
+	NewDataHandlerContext)
